@@ -30,26 +30,21 @@ for stock in stocks:
         if len(close_prices) < 2:
             continue
 
-        # ✅ Force float conversion (fixes your error)
         ret = float(((close_prices.iloc[-1] / close_prices.iloc[0]) - 1) * 100)
 
         results.append((stock.replace(".NS",""), round(ret, 2)))
 
-    except Exception:
+    except:
         continue
 
 # -------------------------------
-# CLEAN INVALID VALUES
+# CLEAN + SORT
 # -------------------------------
 results = [x for x in results if isinstance(x[1], float)]
-
-# -------------------------------
-# SORT TOP 10
-# -------------------------------
 results = sorted(results, key=lambda x: x[1], reverse=True)[:10]
 
 # -------------------------------
-# LOAD YESTERDAY DATA
+# LOAD OLD DATA
 # -------------------------------
 old_stocks = []
 
@@ -61,10 +56,30 @@ if os.path.exists("daily_rs.json"):
         old_stocks = []
 
 # -------------------------------
-# FIND NEW ENTRIES
+# TODAY DATA
 # -------------------------------
 today_stocks = [x[0] for x in results]
+
+# -------------------------------
+# NEW ENTRIES
+# -------------------------------
 new_entries = [stock for stock in today_stocks if stock not in old_stocks]
+
+# -------------------------------
+# RANK CHANGE TRACKER
+# -------------------------------
+rank_changes = []
+
+if old_stocks:
+    for i, stock in enumerate(today_stocks):
+        if stock in old_stocks:
+            old_rank = old_stocks.index(stock) + 1
+            new_rank = i + 1
+
+            if new_rank < old_rank:
+                rank_changes.append(f"⬆ {stock}: {old_rank} → {new_rank}")
+            elif new_rank > old_rank:
+                rank_changes.append(f"⬇ {stock}: {old_rank} → {new_rank}")
 
 # -------------------------------
 # SAVE TODAY DATA
@@ -73,7 +88,7 @@ with open("daily_rs.json", "w") as f:
     json.dump(today_stocks, f)
 
 # -------------------------------
-# CREATE TELEGRAM MESSAGE
+# CREATE MESSAGE
 # -------------------------------
 message = "📊 RSM AI High Score Stocks\n\nTop 10 Today:\n\n"
 
@@ -83,14 +98,20 @@ if results:
 else:
     message += "⚠️ No valid stocks found today\n"
 
-# New Entries Section
+# NEW ENTRIES
 if new_entries:
     message += "\n➕ NEW ENTRIES\n"
     for stock in new_entries:
         message += f"{stock}\n"
 
+# RANK CHANGES
+if rank_changes:
+    message += "\n📈 RANK CHANGES\n"
+    for change in rank_changes:
+        message += change + "\n"
+
 # -------------------------------
-# SEND TELEGRAM MESSAGE
+# SEND TELEGRAM
 # -------------------------------
 try:
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
