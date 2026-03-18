@@ -6,7 +6,7 @@ import json
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# 🔥 Stock List (you can expand later)
+# 🔥 Stock List
 stocks = [
     "WAAREEENER.NS","OLECTRA.NS","JBMA.NS","MMTC.NS",
     "NTPCGREEN.NS","CHENNPETRO.NS","ADANIPOWER.NS",
@@ -30,12 +30,18 @@ for stock in stocks:
         if len(close_prices) < 2:
             continue
 
-        ret = ((close_prices.iloc[-1] / close_prices.iloc[0]) - 1) * 100
+        # ✅ Force float conversion (fixes your error)
+        ret = float(((close_prices.iloc[-1] / close_prices.iloc[0]) - 1) * 100)
 
         results.append((stock.replace(".NS",""), round(ret, 2)))
 
-    except Exception as e:
+    except Exception:
         continue
+
+# -------------------------------
+# CLEAN INVALID VALUES
+# -------------------------------
+results = [x for x in results if isinstance(x[1], float)]
 
 # -------------------------------
 # SORT TOP 10
@@ -58,7 +64,6 @@ if os.path.exists("daily_rs.json"):
 # FIND NEW ENTRIES
 # -------------------------------
 today_stocks = [x[0] for x in results]
-
 new_entries = [stock for stock in today_stocks if stock not in old_stocks]
 
 # -------------------------------
@@ -78,7 +83,7 @@ if results:
 else:
     message += "⚠️ No valid stocks found today\n"
 
-# Add New Entries Section
+# New Entries Section
 if new_entries:
     message += "\n➕ NEW ENTRIES\n"
     for stock in new_entries:
