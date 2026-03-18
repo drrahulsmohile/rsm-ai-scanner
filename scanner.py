@@ -3,170 +3,73 @@ import pandas as pd
 import requests
 import os
 import json
-import datetime
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# Files
-daily_file = "daily_rs.json"
-weekly_file = "weekly_portfolio.json"
-
-# Stock universe (can expand later)
+# Stock list (expand anytime)
 stocks = [
-    "WAAREEENER.NS","OLECTRA.NS","JBMA.NS","MMTC.NS","NTPCGREEN.NS",
-    "CHENNPETRO.NS","ADANIPOWER.NS","DCMSHRIRAM.NS","PREMIERENE.NS","JPPOWER.NS"
+    "WAAREEENER.NS","OLECTRA.NS","JBMA.NS","MMTC.NS",
+    "NTPCGREEN.NS","CHENNPETRO.NS","ADANIPOWER.NS",
+    "DCMSHRIRAM.NS","PREMIERENE.NS","JPPOWER.NS"
 ]
-
-# ---------------------------
-# LOAD OLD DATA
-# ---------------------------
-def load_data(file):
-    if os.path.exists(file):
-        with open(file, "r") as f:
-            return json.load(f)
-    return []
-
-old_daily = load_data(daily_file)
-old_weekly = load_data(weekly_file)
 
 results = []
 
-# ---------------------------
-# FETCH DATA
-# ---------------------------
+# Fetch data
 for stock in stocks:
     try:
-        data = yf.download(stock, period="1mo", progress=False)
-
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
-
-        data = data.dropna()
-
-        if len(data) < 6:
+        data = yf.download(stock, period="5d", progress=False)
+        if len(data) < 2:
             continue
 
-        close = data["Close"]
-
-        latest = float(close.iloc[-1])
-        old = float(close.iloc[-6])
-
-        score = ((latest - old) / old) * 100
-
-        results.append((stock.replace(".NS",""), score))
+        ret = ((data['Close'][-1] / data['Close'][0]) - 1) * 100
+        results.append((stock.replace(".NS",""), round(ret,2)))
 
     except:
         continue
 
-# ---------------------------
-# SORT
-# ---------------------------
-results = sorted(results, key=lambda x: x[1], reverse=True)
+# Sort Top 10
+results = sorted(results, key=lambda x: x[1], reverse=True)[:10]
 
-top10 = results[:10]
-top5 = results[:5]
+# -------------------------------
+# LOAD YESTERDAY DATA
+# -------------------------------
+old_stocks = []
 
-today = datetime.datetime.now().weekday()
+if os.path.exists("daily_rs.json"):
+    try:
+        with open("daily_rs.json", "r") as f:
+            old_stocks = json.load(f)
+    except:
+        old_stocks = []
 
-# ---------------------------
-# DAILY MESSAGE
-# ---------------------------
-daily_list = [x[0] for x in top10]
+# -------------------------------
+# FIND NEW ENTRIES
+# -------------------------------
+today_stocks = [x[0] for x in results]
 
-added = list(set(daily_list) - set(old_daily))
-removed = list(set(old_daily) - set(daily_list))
-stable = list(set(daily_list).intersection(set(old_daily)))
+new_entries = [stock for stock in today_stocks if stock not in old_stocks]
 
-daily_msg = "📊 RSM AI High Score Stocks\n\nTop 10 Today:\n\n"
-
-for stock, score in top10:
-    daily_msg += f"{stock} — {round(score,2)}% 🚀\n"
-
-if added:
-    daily_msg += "\n➕ NEW ENTRIES\n"
-    for s in added:
-        daily_msg += f"{s}\n"
-
-if removed:
-    daily_msg += "\n➖ REMOVED\n"
-    for s in removed:
-        daily_msg += f"{s}\n"
-
-if stable:
-    daily_msg += "\n🔁 STABLE\n"
-    for s in stable:
-        daily_msg += f"{s}\n"
-
-# ---------------------------
-# WEEKLY MESSAGE (FRIDAY ONLY)
-# ---------------------------
-weekly_msg = ""
-
-if today == 4:  # Friday
-
-    weekly_list = [x[0] for x in top5]
-
-    add_w = list(set(weekly_list) - set(old_weekly))
-    remove_w = list(set(old_weekly) - set(weekly_list))
-    hold_w = list(set(weekly_list).intersection(set(old_weekly)))
-
-    weekly_msg = "\n\n📊 RSM WEEKLY PORTFOLIO\n\nSelected Stocks:\n\n"
-
-    for stock in weekly_list:
-        weekly_msg += f"{stock}\n"
-
-    if add_w:
-        weekly_msg += "\n➕ ADD\n"
-        for s in add_w:
-            weekly_msg += f"{s}\n"
-
-    if remove_w:
-        weekly_msg += "\n➖ REMOVE\n"
-        for s in remove_w:
-            weekly_msg += f"{s}\n"
-
-    if hold_w:
-        weekly_msg += "\n🔁 HOLD\n"
-        for s in hold_w:
-            weekly_msg += f"{s}\n"
-
-# ---------------------------
-# FINAL MESSAGE
-# ---------------------------
-final_message = daily_msg + weekly_msg
-
-# ---------------------------
-# TELEGRAM
-# ---------------------------
-url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-requests.post(url, data={"chat_id": CHAT_ID, "text": final_message})
-
-print(final_message)
-
-# ---------------------------
-# SAVE DATA
-# ---------------------------
-with open(daily_file, "w") as f:
-    json.dump(daily_list, f)
-
-if today == 4:
-    with open(weekly_file, "w") as f:
-        json.dump([x[0] for x in top5], f)
-# ---------------------------
-# SAVE & PUSH DATA (IMPORTANT)
-# ---------------------------
-import subprocess
-
-# Save daily data
+# -------------------------------
+# SAVE TODAY DATA
+# -------------------------------
 with open("daily_rs.json", "w") as f:
-    json.dump(daily_list, f)
+    json.dump(today_stocks, f)
 
-# Git config
-subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"])
-subprocess.run(["git", "config", "--global", "user.name", "github-actions"])
+# -------------------------------
+# TELEGRAM MESSAGE
+# -------------------------------
+message = "📊 RSM AI High Score Stocks\n\nTop 10 Today:\n\n"
 
-# Add + Commit + Push
-subprocess.run(["git", "add", "daily_rs.json"])
-subprocess.run(["git", "commit", "-m", "update daily RS"], check=False)
-subprocess.run(["git", "push"])
+for stock, score in results:
+    message += f"{stock} — {score}% 🚀\n"
+
+if new_entries:
+    message += "\n➕ NEW ENTRIES\n"
+    for stock in new_entries:
+        message += f"{stock}\n"
+
+# Send to Telegram
+url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+requests.post(url, data={"chat_id": CHAT_ID, "text": message})
