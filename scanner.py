@@ -153,3 +153,20 @@ with open(daily_file, "w") as f:
 if today == 4:
     with open(weekly_file, "w") as f:
         json.dump([x[0] for x in top5], f)
+# ---------------------------
+# SAVE & PUSH DATA (IMPORTANT)
+# ---------------------------
+import subprocess
+
+# Save daily data
+with open("daily_rs.json", "w") as f:
+    json.dump(daily_list, f)
+
+# Git config
+subprocess.run(["git", "config", "--global", "user.email", "bot@github.com"])
+subprocess.run(["git", "config", "--global", "user.name", "github-actions"])
+
+# Add + Commit + Push
+subprocess.run(["git", "add", "daily_rs.json"])
+subprocess.run(["git", "commit", "-m", "update daily RS"], check=False)
+subprocess.run(["git", "push"])
