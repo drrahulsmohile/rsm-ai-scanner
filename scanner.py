@@ -1,5 +1,4 @@
 import yfinance as yf
-import pandas as pd
 import requests
 import os
 import json
@@ -7,7 +6,7 @@ import json
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# Stock list (expand anytime)
+# 🔥 Stock List (you can expand later)
 stocks = [
     "WAAREEENER.NS","OLECTRA.NS","JBMA.NS","MMTC.NS",
     "NTPCGREEN.NS","CHENNPETRO.NS","ADANIPOWER.NS",
@@ -16,20 +15,31 @@ stocks = [
 
 results = []
 
-# Fetch data
+# -------------------------------
+# FETCH DATA SAFELY
+# -------------------------------
 for stock in stocks:
     try:
         data = yf.download(stock, period="5d", progress=False)
-        if len(data) < 2:
+
+        if data.empty:
             continue
 
-        ret = ((data['Close'][-1] / data['Close'][0]) - 1) * 100
-        results.append((stock.replace(".NS",""), round(ret,2)))
+        close_prices = data['Close'].dropna()
 
-    except:
+        if len(close_prices) < 2:
+            continue
+
+        ret = ((close_prices.iloc[-1] / close_prices.iloc[0]) - 1) * 100
+
+        results.append((stock.replace(".NS",""), round(ret, 2)))
+
+    except Exception as e:
         continue
 
-# Sort Top 10
+# -------------------------------
+# SORT TOP 10
+# -------------------------------
 results = sorted(results, key=lambda x: x[1], reverse=True)[:10]
 
 # -------------------------------
@@ -58,18 +68,27 @@ with open("daily_rs.json", "w") as f:
     json.dump(today_stocks, f)
 
 # -------------------------------
-# TELEGRAM MESSAGE
+# CREATE TELEGRAM MESSAGE
 # -------------------------------
 message = "📊 RSM AI High Score Stocks\n\nTop 10 Today:\n\n"
 
-for stock, score in results:
-    message += f"{stock} — {score}% 🚀\n"
+if results:
+    for stock, score in results:
+        message += f"{stock} — {score}% 🚀\n"
+else:
+    message += "⚠️ No valid stocks found today\n"
 
+# Add New Entries Section
 if new_entries:
     message += "\n➕ NEW ENTRIES\n"
     for stock in new_entries:
         message += f"{stock}\n"
 
-# Send to Telegram
-url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-requests.post(url, data={"chat_id": CHAT_ID, "text": message})
+# -------------------------------
+# SEND TELEGRAM MESSAGE
+# -------------------------------
+try:
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": CHAT_ID, "text": message})
+except:
+    pass
