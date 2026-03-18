@@ -3,33 +3,42 @@ import pandas as pd
 import requests
 import os
 import json
+import datetime
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# File to store yesterday data
-file_name = "portfolio.json"
+# Files
+daily_file = "daily_rs.json"
+weekly_file = "weekly_portfolio.json"
 
-# Load old data
-if os.path.exists(file_name):
-    with open(file_name, "r") as f:
-        old_list = json.load(f)
-else:
-    old_list = []
-
-# Stock universe (you can later expand to Nifty 500)
+# Stock universe (can expand later)
 stocks = [
     "WAAREEENER.NS","OLECTRA.NS","JBMA.NS","MMTC.NS","NTPCGREEN.NS",
     "CHENNPETRO.NS","ADANIPOWER.NS","DCMSHRIRAM.NS","PREMIERENE.NS","JPPOWER.NS"
 ]
 
+# ---------------------------
+# LOAD OLD DATA
+# ---------------------------
+def load_data(file):
+    if os.path.exists(file):
+        with open(file, "r") as f:
+            return json.load(f)
+    return []
+
+old_daily = load_data(daily_file)
+old_weekly = load_data(weekly_file)
+
 results = []
 
+# ---------------------------
+# FETCH DATA
+# ---------------------------
 for stock in stocks:
     try:
         data = yf.download(stock, period="1mo", progress=False)
 
-        # Fix multi index
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
 
@@ -50,56 +59,97 @@ for stock in stocks:
     except:
         continue
 
-# Sort
+# ---------------------------
+# SORT
+# ---------------------------
 results = sorted(results, key=lambda x: x[1], reverse=True)
 
 top10 = results[:10]
+top5 = results[:5]
 
-new_list = [x[0] for x in top10]
+today = datetime.datetime.now().weekday()
 
-# ----------------------------
-# COMPARISON LOGIC
-# ----------------------------
-added = list(set(new_list) - set(old_list))
-removed = list(set(old_list) - set(new_list))
-stable = list(set(new_list).intersection(set(old_list)))
+# ---------------------------
+# DAILY MESSAGE
+# ---------------------------
+daily_list = [x[0] for x in top10]
 
-# ----------------------------
-# MESSAGE FORMAT
-# ----------------------------
-message = "📊 RSM AI High Score Stocks\n\nTop 10 Today:\n\n"
+added = list(set(daily_list) - set(old_daily))
+removed = list(set(old_daily) - set(daily_list))
+stable = list(set(daily_list).intersection(set(old_daily)))
+
+daily_msg = "📊 RSM AI High Score Stocks\n\nTop 10 Today:\n\n"
 
 for stock, score in top10:
-    message += f"{stock} — {round(score,2)}% 🚀\n"
+    daily_msg += f"{stock} — {round(score,2)}% 🚀\n"
 
-# NEW ENTRIES
 if added:
-    message += "\n➕ NEW ENTRIES\n"
+    daily_msg += "\n➕ NEW ENTRIES\n"
     for s in added:
-        message += f"{s}\n"
+        daily_msg += f"{s}\n"
 
-# REMOVED
 if removed:
-    message += "\n➖ REMOVED\n"
+    daily_msg += "\n➖ REMOVED\n"
     for s in removed:
-        message += f"{s}\n"
+        daily_msg += f"{s}\n"
 
-# STABLE
 if stable:
-    message += "\n🔁 STABLE\n"
+    daily_msg += "\n🔁 STABLE\n"
     for s in stable:
-        message += f"{s}\n"
+        daily_msg += f"{s}\n"
 
-# ----------------------------
-# SEND TELEGRAM
-# ----------------------------
+# ---------------------------
+# WEEKLY MESSAGE (FRIDAY ONLY)
+# ---------------------------
+weekly_msg = ""
+
+if today == 4:  # Friday
+
+    weekly_list = [x[0] for x in top5]
+
+    add_w = list(set(weekly_list) - set(old_weekly))
+    remove_w = list(set(old_weekly) - set(weekly_list))
+    hold_w = list(set(weekly_list).intersection(set(old_weekly)))
+
+    weekly_msg = "\n\n📊 RSM WEEKLY PORTFOLIO\n\nSelected Stocks:\n\n"
+
+    for stock in weekly_list:
+        weekly_msg += f"{stock}\n"
+
+    if add_w:
+        weekly_msg += "\n➕ ADD\n"
+        for s in add_w:
+            weekly_msg += f"{s}\n"
+
+    if remove_w:
+        weekly_msg += "\n➖ REMOVE\n"
+        for s in remove_w:
+            weekly_msg += f"{s}\n"
+
+    if hold_w:
+        weekly_msg += "\n🔁 HOLD\n"
+        for s in hold_w:
+            weekly_msg += f"{s}\n"
+
+# ---------------------------
+# FINAL MESSAGE
+# ---------------------------
+final_message = daily_msg + weekly_msg
+
+# ---------------------------
+# TELEGRAM
+# ---------------------------
 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-requests.post(url, data={"chat_id": CHAT_ID, "text": message})
+requests.post(url, data={"chat_id": CHAT_ID, "text": final_message})
 
-print(message)
+print(final_message)
 
-# ----------------------------
-# SAVE TODAY DATA
-# ----------------------------
-with open(file_name, "w") as f:
-    json.dump(new_list, f)
+# ---------------------------
+# SAVE DATA
+# ---------------------------
+with open(daily_file, "w") as f:
+    json.dump(daily_list, f)
+
+if today == 4:
+    with open(weekly_file, "w") as f:
+        json.dump([x[0] for x in top5], f)
