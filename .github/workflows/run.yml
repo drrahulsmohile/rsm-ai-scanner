@@ -1,6 +1,6 @@
 name: Run Momentum Scanner
 permissions:
-  contents: writea
+  contents: write
 on:
   schedule:
     - cron: '30 14 * * 1-5'   # 8:00 PM IST (Mon-Fri)
