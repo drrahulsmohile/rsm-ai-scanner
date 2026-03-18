@@ -3,19 +3,15 @@ import pandas as pd
 import requests
 import os
 
+# Telegram credentials
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# Nifty 500 sample list (can expand later)
+# Stock list (can expand later)
 stocks = [
     "RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS",
     "SBIN.NS","LT.NS","ITC.NS","AXISBANK.NS","HCLTECH.NS"
 ]
-
-# Nifty 500 Index (proxy)
-nifty = yf.download("^CRSLDX", period="3mo", progress=False)
-
-message = "📊 RSM AI High Score Stocks (Top 10)\n\n"
 
 results = []
 
@@ -23,27 +19,52 @@ for stock in stocks:
     try:
         data = yf.download(stock, period="3mo", progress=False)
 
-        if data.empty:
+        # Safety check
+        if data is None or len(data) < 20:
             continue
 
-        rs = (data['Close'] / nifty['Close']) * 100
-        score = ((rs.iloc[-1] / rs.iloc[0]) - 1) * 100
+        # Momentum calculation (last close vs 20-day ago)
+        latest_price = data["Close"].iloc[-1]
+        old_price = data["Close"].iloc[-20]
 
-        results.append((stock.replace(".NS",""), round(score,2)))
+        if old_price == 0:
+            continue
 
-    except:
-        continue
+        percent_change = ((latest_price - old_price) / old_price) * 100
 
-# Sort by strength
-results = sorted(results, key=lambda x: x[1], reverse=True)
+        results.append((stock, percent_change))
 
-top10 = results[:10]
+    except Exception as e:
+        print(f"Error in {stock}: {e}")
 
-for stock, score in top10:
-    message += f"{stock} — {score}% 🚀\n"
+# Remove invalid values
+results = [r for r in results if r[1] is not None]
 
-# Send Telegram message
-url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-requests.post(url, data={"chat_id": CHAT_ID, "text": message})
+# Sort descending
+results = sorted(results, key=lambda x: float(x[1]), reverse=True)
 
+# Top 10
+top_10 = results[:10]
+
+# Format message
+message = "📊 RSM AI High Score Stocks\n\nTop 10 Today:\n\n"
+
+for stock, score in top_10:
+    message += f"{stock} — {round(score,2)}% 🚀\n"
+
+# Send to Telegram
+if BOT_TOKEN and CHAT_ID:
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+    requests.post(url, data=payload)
+else:
+    print("Telegram credentials missing")
+
+# Print for logs
 print(message)
+
+
+
